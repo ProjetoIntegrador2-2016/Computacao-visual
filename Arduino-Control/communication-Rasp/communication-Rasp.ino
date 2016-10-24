@@ -12,13 +12,15 @@
 #define BACKWARD 'b'
 #define LEFT 'l'
 #define RIGHT 'r'
+#define TURN_LEFT 'e'
+#define TURN_RIGHT 'd'
 
 const byte PWMA = 3;  // PWM control (speed) for motor A
 const byte PWMB = 11; // PWM control (speed) for motor B
 const byte DIRA = 12; // Direction control for motor A
 const byte DIRB = 13; // Direction control for motor B
 
-char incoming = 'q';
+char incoming = 'n';
 
 void setup()
 {
@@ -43,11 +45,21 @@ void loop()
       break;
       case 'l':
         analogWrite(PWMA, 50);
-        analogWrite(PWMB, 255);
+        analogWrite(PWMB, 200);
       break;
       case 'r':
-        analogWrite(PWMA, 255);
+        analogWrite(PWMA, 200);
         analogWrite(PWMB, 50);
+      break;
+      case 'e':
+         stopArdumoto(MOTOR_A);
+         stopArdumoto(MOTOR_B);
+         driveArdumoto(MOTOR_A, CW, 200);
+      break;
+      case 'd':
+         stopArdumoto(MOTOR_A);
+         stopArdumoto(MOTOR_B);
+         driveArdumoto(MOTOR_B, CW, 200);
       break;
       default:
         stopArdumoto(MOTOR_A);

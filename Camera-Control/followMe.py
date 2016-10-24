@@ -25,9 +25,12 @@ COLOR_LOWER_BOUND = np.array(GREEN_LOWER, np.uint8)
 COLOR_UPPER_BOUND = np.array(GREEN_UPPER, np.uint8)
 
 # Position constants
-FOWARD = 'f'
+FORWARD = 'f'
+BACKWARD = 'b'
 LEFT = 'l'
 RIGHT = 'r'
+TURN_LEFT = 'e'
+TURN_RIGHT = 'd'
 STOP = 's'
 NONE = 'n'
 
@@ -110,14 +113,12 @@ def stop(serial_com):
 
 
 def turn_left(sleep, serial_com):
-    stop(serial_com)
-    com.write_direction(serial_com, LEFT)
+    com.write_direction(serial_com, TURN_LEFT)
     time.sleep(sleep)
 
 
 def turn_right(sleep, serial_com):
-    stop(serial_com)
-    com.write_direction(serial_com, RIGHT)
+    com.write_direction(serial_com, TURN_RIGHT)
     time.sleep(sleep)
 
 
