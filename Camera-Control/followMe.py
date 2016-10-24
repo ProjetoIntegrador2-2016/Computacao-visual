@@ -1,14 +1,14 @@
 # imports
 import numpy as np
-import imutils
 import cv2
+import imutils
 import library
 import comArduino as com
 import time
 
 # HSV threshold for green color
-GREEN_LOWER = [48, 48, 49]
-GREEN_UPPER = [73, 255, 220]
+GREEN_LOWER = [66, 170, 55]
+GREEN_UPPER = [82, 255, 255]
 
 # Constants used to calibrate the camera, in cm
 INITIAL_DISTANCE = 16
@@ -159,6 +159,8 @@ while camera.isOpened():
     elif last_position == RIGHT:
         turn_right(SHORT_WAIT, ser)
 
+    print position
+    print distance
     last_position = position
 
     # show the frame to our screen
