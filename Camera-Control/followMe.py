@@ -18,9 +18,6 @@ OBJECT_WIDTH = 3.75 #5.5  # radius size
 OBJECT_APPARENT_WIDTH = 39 #114  # radius in pixels
 FOCAL_LENGTH = (OBJECT_APPARENT_WIDTH * INITIAL_DISTANCE) / OBJECT_WIDTH
 
-# Filter noise that are less than 10 pixels in radius
-MINIMUM_APPARENT_WIDTH = 10
-
 # Define the lower and upper bounds of the color
 # Use 8 bits unsigned numbers (0 - 255)
 COLOR_LOWER_BOUND = np.array(GREEN_LOWER, np.uint8)
@@ -46,6 +43,16 @@ SHORT_WAIT = 0.00625
 MIN_DISTANCE = 20
 MAX_DISTANCE = 50
 
+def iniate_camera():
+    # if a video path was not supplied, grab the webcam
+    # otherwise, grab the reference video
+    global camera
+    camera = cv2.VideoCapture(0)
+    if camera.isOpened():
+        (grab, frame) = camera.read()
+        cv2.imshow("Frame", frame)
+        time.sleep(0.001) # Time to warm up the camera
+
 
 def calculate_distance(radius):
     current_distance = (OBJECT_WIDTH * FOCAL_LENGTH) / radius
@@ -53,7 +60,8 @@ def calculate_distance(radius):
 
 
 def get_distance_n_position(radius, (center_x, center_y),
-                            current_frame, largest_con):
+                            current_frame, largest_con,
+                            current_radius):
     """
 
     :param radius: radius of the object identified
@@ -125,7 +133,7 @@ def stop():
 def turn_left(sleep):
     go(TURN_LEFT, sleep)
     stop()
-    
+
 
 def turn_right(sleep):
     go(TURN_RIGHT, sleep)
@@ -144,74 +152,80 @@ def is_moving():
     return z_axys and x_axys
 
 
+def move_or_stop():
+    # The cart is inside the safe distance
+    # Keep inside it
+    global position
+    if MIN_DISTANCE < distance < MAX_DISTANCE:
+        wait_time = MEDIUM_WAIT
+        if not is_moving():
+            position = STOP
+
+    # Cart is too far way, try to keep up
+    elif distance > MAX_DISTANCE:
+        wait_time = LONG_WAIT
+
+    # Cart is inside the danger zone. back up
+    elif distance < MIN_DISTANCE:
+        wait_time = SHORT_WAIT
+        position = BACKWARD
+
+    # Cart is in the limbo, wait for rescue
+    else:
+        wait_time = SHORT_WAIT
+        position = NONE
+
+    go(position, wait_time)
+
+    last_position = position
+    last_distance = distance
+
+
+def make_a_curve():
+    if last_position == LEFT:
+        turn_left(LONGER_WAIT)
+    elif last_position == RIGHT:
+        turn_right(LONGER_WAIT)
+
+
+
+def main():
+    iniate_camera()
+
+    while camera.isOpened():
+
+        contours, frame = get_contours_in_frame()
+
+        # only proceed if at least one contour was found
+        if len(contours) > 0:
+            ((x, y), current_radius, largest_contour) = library.find_circle_contour(contours)
+
+            distance, position = get_distance_n_position(current_radius, (x, y), frame, largest_contour, current_radius)
+
+            move_or_stop()
+
+        else:
+            distance = 0
+            make_a_curve()
+
+        print distance
+
+        # show the frame to our screen
+        cv2.imshow("Frame", frame)
+        key = cv2.waitKey(1) & 0xFF
+
+        # if the 'q' key is pressed, stop the loop
+        if key == ord("q"):
+            break
+
+    # cleanup the camera and close any connections
+    #end_serial()
+    camera.release()
+    cv2.destroyAllWindows()
+
+
+# Execute
 position, distance, current_radius = setup_initial_vars()
 last_position = position
 last_distance = distance
-
-# if a video path was not supplied, grab the webcam
-# otherwise, grab the reference video
-camera = cv2.VideoCapture(0)
-if camera.isOpened():
-    (grab, frame) = camera.read()
-    cv2.imshow("Frame", frame)
-    time.sleep(0.001) # Time to warm up the camera
-    
-while camera.isOpened():
-
-    contours, frame = get_contours_in_frame()
-    
-    # only proceed if at least one contour was found
-    if len(contours) > 0:
-        ((x, y), current_radius, largest_contour) = library.find_circle_contour(contours)
-
-        distance, position = get_distance_n_position(current_radius, (x, y), frame, largest_contour)
-        
-        # The cart is inside the safe distance
-        # Keep inside it
-        if MIN_DISTANCE < distance < MAX_DISTANCE:
-            wait_time = MEDIUM_WAIT
-            if not is_moving():
-                position = STOP
-
-        # Cart is too far way, try to keep up
-        elif distance > MAX_DISTANCE:
-            wait_time = LONG_WAIT
-
-        # Cart is inside the danger zone. back up
-        elif distance < MIN_DISTANCE:
-            wait_time = SHORT_WAIT
-            position = BACKWARD
-
-        # Cart is in the limbo, wait for rescue
-        else:
-            wait_time = SHORT_WAIT
-            position = NONE
-
-        go(position, wait_time)
-
-        last_position = position
-        last_distance = distance
-                
-    else:
-        if last_position == LEFT:
-            distance = 0
-            turn_left(LONGER_WAIT)
-
-        else:
-            distance = 0
-            turn_right(LONGER_WAIT)
-
-    print distance
-    
-    # show the frame to our screen
-    cv2.imshow("Frame", frame)
-    key = cv2.waitKey(1) & 0xFF
-
-    # if the 'q' key is pressed, stop the loop
-    if key == ord("q"):
-        break
-    
-# cleanup the camera and close any connections
-end_serial()
-camera.release()
-cv2.destroyAllWindows()
+main()
