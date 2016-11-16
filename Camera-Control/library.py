@@ -6,10 +6,12 @@ THICKNESS = 2
 
 
 def apply_masks(frame, greenUpperBound, greenLowerBound):
-    hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+    #hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+    #hls = cv2.cvtColor(frame, cv2.COLOR_BGR2HLS)
+    luv = cv2.cvtColor(frame, cv2.COLOR_BGR2Luv)
     # creates a mask for the color, do dilatations and erosions
     # to remove small blobs in the mask
-    mask = cv2.inRange(hsv, greenLowerBound, greenUpperBound)
+    mask = cv2.inRange(luv, greenLowerBound, greenUpperBound)
     mask = cv2.erode(mask, None, iterations=2)
     mask = cv2.dilate(mask, None, iterations=2)
     return mask
