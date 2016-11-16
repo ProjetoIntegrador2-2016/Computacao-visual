@@ -9,7 +9,7 @@ import threading
 import ringbuffer as rb
 
 SER = serial.Serial('/dev/serial0', 19200, timeout=1) #19200
-LOCK = threading.Lock() # Mutex for writing in serial port
+LOCK = threading.Lock()  # Mutex for writing in serial port
 
 # HSV threshold for green color
 #GREEN_LOWER = [0, 137, 90]
@@ -20,13 +20,13 @@ LOCK = threading.Lock() # Mutex for writing in serial port
 # GREEN_UPPER = [11, 151, 255]
 
 # Luv threshold for green color
-GREEN_LOWER = [0, 137, 0]
-GREEN_UPPER = [255, 170, 255]
+GREEN_LOWER = [0, 120, 0]
+GREEN_UPPER = [255, 255, 255]
 
 # Constants used to calibrate the camera, in cm
-INITIAL_DISTANCE = 34.5 #16 #31
-OBJECT_WIDTH = 5.5 #3.75 # radius size
-OBJECT_APPARENT_WIDTH = 44 #114 #39 # radius in pixels
+INITIAL_DISTANCE = 34.5  #16 #31
+OBJECT_WIDTH = 5.5  #3.75 # radius size
+OBJECT_APPARENT_WIDTH = 44  #114 #39 # radius in pixels
 FOCAL_LENGTH = (OBJECT_APPARENT_WIDTH * INITIAL_DISTANCE) / OBJECT_WIDTH
 
 # Filter noise that are less than 10 pixels in radius
@@ -37,31 +37,17 @@ MINIMUM_APPARENT_WIDTH = 10
 COLOR_LOWER_BOUND = np.array(GREEN_LOWER, np.uint8)
 COLOR_UPPER_BOUND = np.array(GREEN_UPPER, np.uint8)
 
-# Position constants
-FORWARD = 'f'
-BACKWARD = 'b'
-LEFT = 'r'
-RIGHT = 'l'
-TURN_LEFT = 'e'
-TURN_RIGHT = 'd'
-STOP = 's'
-NONE = 'n'
+BUFFER_SIZE = 10  # At 30 fps this is 0.5 sec equivalent
 
-# Time constants
-LONGER_WAIT = 0.05
-LONG_WAIT = 0.0125
-MEDIUM_WAIT = 0.00625
-SHORT_WAIT = 0.00625
-
-# Distance constants in cm
-MIN_DISTANCE = 20
-MAX_DISTANCE = 50
-
-BUFFER_SIZE = 10 # At 30 fps this is 0.5 sec equivalent
 
 def calculate_distance(radius):
     current_distance = (OBJECT_WIDTH * FOCAL_LENGTH) / radius
     return current_distance
+
+
+def calculateDeviationInCM(current_deviaton):
+    deviation_cm = (current_deviaton * OBJECT_WIDTH) / OBJECT_APPARENT_WIDTH
+    return deviation_cm
 
 
 def get_distance_n_position(radius, (center_x, center_y),
@@ -86,13 +72,13 @@ def get_distance_n_position(radius, (center_x, center_y),
         known_distance = calculate_distance(current_radius)
 
         centroid = library.calculate_centroid(largest_con)
-        known_position = library.find_screen_position(centroid, current_frame)
+        known_deviation = library.find_screen_position(centroid, current_frame)
 
     else:
         known_distance = 0.0
-        known_position = NONE
+        known_deviation = 0.0
 
-    return known_distance, known_position
+    return known_distance, known_deviation
 
 
 def get_contours_in_frame():
@@ -109,11 +95,18 @@ def get_contours_in_frame():
 
 
 def setup_initial_vars():
-    initial_position = NONE
+    initial_deviation = 0.0
     initial_radius = 1
     initial_distance = calculate_distance(initial_radius)
 
-    return initial_position, initial_distance, initial_radius
+    return initial_deviation, initial_distance, initial_radius
+
+def write_to_serial(string):
+    try:
+        with LOCK:
+            SER.write(string)
+    except KeyboardInterrupt:
+        end_serial()
 
 
 def end_serial():
@@ -121,46 +114,7 @@ def end_serial():
     SER.close()
 
 
-def go(direction, sleep):
-    print "go " + direction
-    try:
-        with LOCK:
-            SER.write(direction)
-        time.sleep(sleep)
-    except KeyboardInterrupt:
-        end_serial()
-
-
-def stop():
-    go(STOP, LONGER_WAIT)
-
-
-def turn_left(sleep):
-    go(TURN_LEFT, sleep)
-    stop()
-    
-
-def turn_right(sleep):
-    go(TURN_RIGHT, sleep)
-    stop()
-
-
-def is_moving():
-    global distance
-    global last_distance
-    z_axys = ((last_distance - distance) > 0.25)
-
-    global position
-    global last_position
-    x_axys = (last_position != position)
-
-    return z_axys and x_axys
-
-
-position, distance, current_radius = setup_initial_vars()
-last_position = position
-last_distance = distance
-
+deviation, distance, current_radius = setup_initial_vars()
 distances = rb.RingBuffer(BUFFER_SIZE)
 
 # if a video path was not supplied, grab the webcam
@@ -169,7 +123,7 @@ camera = cv2.VideoCapture(0)
 if camera.isOpened():
     (grab, frame) = camera.read()
     cv2.imshow("Frame", frame)
-    time.sleep(0.001) # Time to warm up the camera
+    time.sleep(0.001)  # Time to warm up the camera
 
 while camera.isOpened():
 
@@ -179,50 +133,28 @@ while camera.isOpened():
     if len(contours) > 0:
         ((x, y), current_radius, largest_contour) = library.find_circle_contour(contours)
         
-        distance, position = get_distance_n_position(current_radius, (x, y), frame, largest_contour)
+        distance, deviation = get_distance_n_position(current_radius, (x, y), frame, largest_contour)
 
         distances.append(distance)
         print ('Media:')
         print rb.running_mean(distances.get(), BUFFER_SIZE)
-        # The cart is inside the safe distance
-        # Keep inside it
-        if MIN_DISTANCE - 1 < distance < MIN_DISTANCE + 1: # Error margin
-            wait_time = SHORT_WAIT
-            position = STOP
 
-        elif MIN_DISTANCE < distance < MAX_DISTANCE:
-            wait_time = SHORT_WAIT
+        if distances.get() > 0:
+            deviated_cm = calculateDeviationInCM(deviation)
+            tetaRad = np.arcsin(deviated_cm / distance)
+            yPos = distance * (np.cos(tetaRad))
+            # xPos = deviated_cm
 
-        # Cart is too far way, accelerate
-        elif distance > MAX_DISTANCE:
-            wait_time = LONG_WAIT
+            position = ('%f,%f' % (deviated_cm, yPos))
+            write_to_serial(position)
 
-        # Cart is inside the danger zone. back up
-        elif distance < MIN_DISTANCE:
-            wait_time = SHORT_WAIT
-            position = BACKWARD
-
-        # Cart is in the limbo, wait for rescue
         else:
-            wait_time = SHORT_WAIT
-            position = NONE
+            # wait for mean
 
-        go(position, wait_time)
-
-        last_position = position
-        last_distance = distance
-                
     else:
-        if last_position == LEFT:
-            distance = 0
-            turn_left(LONGER_WAIT)
+        invalid_token = 'i'
+        write_to_serial(invalid_token)
 
-        else:
-            distance = 0
-            turn_right(LONGER_WAIT)
-
-    print distance
-    print '\n'
     # print "FPS {0}".format(camera.get(cv2.CAP_PROP_FPS))
     
     # show the frame to our screen

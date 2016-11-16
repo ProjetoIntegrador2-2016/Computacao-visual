@@ -37,21 +37,13 @@ def draw_circle(frame, center, radius):
 
 
 def find_screen_position(centroid, frame):
-    if centroid[0] < (frame.shape[1] / 3):
-        position = 'l'
-    elif centroid[0] < ((frame.shape[1] / 3) * 2):
-        position = 'f'
+    if centroid[0] < (frame.shape[1] / 2):
+        deviation = centroid[0] - frame.shape[1]/2
+
     else:
-        position = 'r'
+        deviation = centroid[0] - frame.shape[1] / 2
 
-    # if centroid[1] < (frame.shape[0]/3):
-    #     position += "-Cima"
-    # elif centroid[1] < ((frame.shape[0] / 3) * 2):
-    #     position += "-Centro"
-    # else:
-    #     position += "-Baixo"
-
-    return position
+    return deviation
 
 
 def print_distance(frame, distance):
