@@ -7,6 +7,7 @@ import serial
 import time
 import threading
 import ringbuffer as rb
+import struct
 
 SER = serial.Serial('/dev/serial0', 19200, timeout=1) #19200
 LOCK = threading.Lock()  # Mutex for writing in serial port
@@ -114,8 +115,16 @@ def end_serial():
     SER.close()
 
 
+def packIntegerAsULong(value):
+    """Packs a python 4 byte unsigned integer to an arduino unsigned long"""
+    return struct.pack('I', value)    #should check bounds
+
 deviation, distance, current_radius = setup_initial_vars()
 distances = rb.RingBuffer(BUFFER_SIZE)
+old_phi = np.pi/2
+error_sum = 0
+Kp = 0.5
+Ki = 0.025
 
 # if a video path was not supplied, grab the webcam
 # otherwise, grab the reference video
@@ -144,11 +153,31 @@ while camera.isOpened():
             tetaRad = np.arcsin(deviated_cm / distance)
             yPos = distance * (np.cos(tetaRad))
             # xPos = deviated_cm
+            phi_desired = np.arctan2(yPos, deviated_cm)
+            error = phi_desired - old_phi
+            error_sum += error
+            gain = Kp * error + Ki * error_sum
+            old_phi = phi_desired
+            velocity = deviated_cm / np.cos(phi_desired)
+            omega = gain
+            vr = ((2 * velocity + omega * 7) / 2 * 3)
+            vl = ((2 * velocity - omega * 7) / 2 * 3)
 
-            position = ('%f,%f' % (deviated_cm, yPos))
-            write_to_serial(position)
+            if vr > 254:
+                vr = 250
+
+            if vl > 254:
+                vl = 250
+
+            if 19 < distance < 21:
+                vr = vl = 0
+
+            ba = bytearray([int(vr), int(vl)])
+            write_to_serial(ba)
 
         else:
+            invalid_token = 'i'
+            write_to_serial(invalid_token)
             # wait for mean
 
     else:
