@@ -3,13 +3,13 @@ import numpy as np
 import cv2
 import imutils
 import library
-import serial
+#import serial
 import time
 import threading
 import ringbuffer as rb
 import struct
 
-SER = serial.Serial('/dev/serial0', 19200, timeout=1) #19200
+#SER = serial.Serial('/dev/serial0', 19200, timeout=1) #19200
 LOCK = threading.Lock()  # Mutex for writing in serial port
 
 # HSV threshold for green color
@@ -105,14 +105,15 @@ def setup_initial_vars():
 def write_to_serial(string):
     try:
         with LOCK:
-            SER.write(string)
+            #SER.write(string)
+            print 'oi'
     except KeyboardInterrupt:
         end_serial()
 
 
 def end_serial():
     print "Closing serial ports"
-    SER.close()
+    #SER.close()
 
 
 def packIntegerAsULong(value):
@@ -146,34 +147,39 @@ while camera.isOpened():
 
         distances.append(distance)
         print ('Media:')
-        print rb.running_mean(distances.get(), BUFFER_SIZE)
+        distance_mean = rb.running_mean(distances.get(), BUFFER_SIZE)
+        print distance_mean
 
-        if distances.get() > 0:
+        if distance_mean > 0:
             deviated_cm = calculateDeviationInCM(deviation)
-            tetaRad = np.arcsin(deviated_cm / distance)
-            yPos = distance * (np.cos(tetaRad))
-            # xPos = deviated_cm
-            phi_desired = np.arctan2(yPos, deviated_cm)
-            error = phi_desired - old_phi
-            error_sum += error
-            gain = Kp * error + Ki * error_sum
-            old_phi = phi_desired
-            velocity = deviated_cm / np.cos(phi_desired)
-            omega = gain
-            vr = ((2 * velocity + omega * 7) / 2 * 3)
-            vl = ((2 * velocity - omega * 7) / 2 * 3)
+            tetaRad = np.arcsin(deviated_cm / distance_mean)
 
-            if vr > 254:
-                vr = 250
+            yPos = distance_mean * (np.cos(tetaRad))
+            xPos = deviated_cm
+            print ("%.2f, %.2f" % (xPos, yPos))
 
-            if vl > 254:
-                vl = 250
 
-            if 19 < distance < 21:
-                vr = vl = 0
-
-            ba = bytearray([int(vr), int(vl)])
-            write_to_serial(ba)
+            # phi_desired = np.arctan2(yPos, deviated_cm)
+            # error = phi_desired - old_phi
+            # error_sum += error
+            # gain = Kp * error + Ki * error_sum
+            # old_phi = phi_desired
+            # velocity = deviated_cm / np.cos(phi_desired)
+            # omega = gain
+            # vr = ((2 * velocity + omega * 7) / 2 * 3)
+            # vl = ((2 * velocity - omega * 7) / 2 * 3)
+            #
+            # if vr > 254:
+            #     vr = 250
+            #
+            # if vl > 254:
+            #     vl = 250
+            #
+            # if 19 < distance < 21:
+            #     vr = vl = 0
+            #
+            # ba = bytearray([int(vr), int(vl)])
+            # write_to_serial(ba)
 
         else:
             invalid_token = 'i'
