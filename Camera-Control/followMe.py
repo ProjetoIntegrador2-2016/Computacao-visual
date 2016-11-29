@@ -8,13 +8,14 @@ import time
 import threading
 import ringbuffer as rb
 import struct
+import math
 
-SER = serial.Serial('/dev/serial0', 19200, timeout=1) #19200
+SER = serial.Serial('/dev/serial0', 19200, timeout=1)  # 19200
 LOCK = threading.Lock()  # Mutex for writing in serial port
 
 # HSV threshold for green color
-#GREEN_LOWER = [0, 137, 90]
-#GREEN_UPPER = [7, 188, 240]
+# GREEN_LOWER = [0, 137, 90]
+# GREEN_UPPER = [7, 188, 240]
 
 # HSL threshold for green color
 # GREEN_LOWER = [1, 88, 0]
@@ -46,7 +47,7 @@ def calculate_distance(radius):
     return current_distance
 
 
-def calculateDeviationInCM(current_deviaton):
+def calculate_deviation_cm(current_deviaton):
     deviation_cm = (current_deviaton * OBJECT_WIDTH) / OBJECT_APPARENT_WIDTH
     return deviation_cm
 
@@ -102,6 +103,7 @@ def setup_initial_vars():
 
     return initial_deviation, initial_distance, initial_radius
 
+
 def write_to_serial(string):
     try:
         with LOCK:
@@ -115,23 +117,16 @@ def end_serial():
     SER.close()
 
 
-def packIntegerAsULong(value):
-    """Packs a python 4 byte unsigned integer to an arduino unsigned long"""
-    return struct.pack('I', value)    #should check bounds
-
 deviation, distance, current_radius = setup_initial_vars()
 distances = rb.RingBuffer(BUFFER_SIZE)
-old_phi = np.pi/2
-error_sum = 0
-Kp = 0.5
-Ki = 0.025
+last_valid_teta = 0
 
 # if a video path was not supplied, grab the webcam
 # otherwise, grab the reference video
 camera = cv2.VideoCapture(0)
 if camera.isOpened():
     (grab, frame) = camera.read()
-    cv2.imshow("Frame", frame)
+    #cv2.imshow("Frame", frame)
     time.sleep(0.001)  # Time to warm up the camera
 
 while camera.isOpened():
@@ -145,35 +140,54 @@ while camera.isOpened():
         distance, deviation = get_distance_n_position(current_radius, (x, y), frame, largest_contour)
 
         distances.append(distance)
-        print ('Media:')
-        print rb.running_mean(distances.get(), BUFFER_SIZE)
+        distance_mean = rb.running_mean(distances.get(), BUFFER_SIZE)
 
-        if distances.get() > 0:
-            deviated_cm = calculateDeviationInCM(deviation)
-            tetaRad = np.arcsin(deviated_cm / distance)
-            yPos = distance * (np.cos(tetaRad))
-            # xPos = deviated_cm
-            phi_desired = np.arctan2(yPos, deviated_cm)
-            error = phi_desired - old_phi
-            error_sum += error
-            gain = Kp * error + Ki * error_sum
-            old_phi = phi_desired
-            velocity = deviated_cm / np.cos(phi_desired)
-            omega = gain
-            vr = ((2 * velocity + omega * 7) / 2 * 3)
-            vl = ((2 * velocity - omega * 7) / 2 * 3)
+        if distance_mean > 0:
+            deviated_cm = calculate_deviation_cm(deviation)
+            tetaRad = np.arcsin(deviated_cm / distance_mean)
 
-            if vr > 254:
-                vr = 250
+            # For invalid arcsin values is simpler to use the last valid one
+            if not math.isnan(tetaRad):
+                last_valid_teta = tetaRad
+            else:
+                tetaRad = last_valid_teta
 
-            if vl > 254:
-                vl = 250
+            # Get in Y axys (straight ahead)
+            yPos = distance_mean * (np.cos(tetaRad))
+            xPos = deviated_cm
 
-            if 19 < distance < 21:
-                vr = vl = 0
+            # Put the space in front to assure the first float will be read
+            msg = (" %.2f, %.2f" % (xPos, yPos))
+            print msg
+            write_to_serial(msg.encode('ascii'))
 
-            ba = bytearray([int(vr), int(vl)])
-            write_to_serial(ba)
+            # phi_desired = np.arctan2(yPos, deviated_cm)
+            # error = setpoint - phiqueeumedi
+            # error_sum += error
+            # gain = Kp * error + Ki * error_sum
+            # #old_phi = phi_desired
+            # velocity = deviated_cm / np.cos(phi_desired)
+            #
+            # omega = gain
+            # vr = ((2 * velocity + omega * 7) / 2 * 3)
+            # vl = ((2 * velocity - omega * 7) / 2 * 3)
+            #
+            # vr = (2 * v + w * comprimento) / (2*r)
+            #
+            # if vr > 254:
+            #    vr = 250
+            #
+            # if vl > 254:
+            #    vl = 250
+            #
+            # if 19 < distance < 21:
+            #    vr = vl = 0
+            # if not vr:
+            #    vr = 0
+            # if not vl:
+            #    vl = 0
+            # ba = bytearray([int(vr), int(vl)])
+            # write_to_serial(ba)
 
         else:
             invalid_token = 'i'
@@ -187,7 +201,7 @@ while camera.isOpened():
     # print "FPS {0}".format(camera.get(cv2.CAP_PROP_FPS))
     
     # show the frame to our screen
-    cv2.imshow("Frame", frame)
+    # cv2.imshow("Frame", frame)
     key = cv2.waitKey(1) & 0xFF
 
     # if the 'q' key is pressed, stop the loop
