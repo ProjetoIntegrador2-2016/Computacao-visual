@@ -11,6 +11,7 @@ import struct
 import math
 
 SER = serial.Serial('/dev/serial0', 19200, timeout=1)  # 19200
+
 LOCK = threading.Lock()  # Mutex for writing in serial port
 
 # HSV threshold for green color
@@ -114,7 +115,7 @@ def write_to_serial(string):
 
 def end_serial():
     print "Closing serial ports"
-    SER.close()
+    #SER.close()
 
 
 deviation, distance, current_radius = setup_initial_vars()
@@ -140,6 +141,7 @@ while camera.isOpened():
         distance, deviation = get_distance_n_position(current_radius, (x, y), frame, largest_contour)
 
         distances.append(distance)
+
         distance_mean = rb.running_mean(distances.get(), BUFFER_SIZE)
 
         if distance_mean > 0:
@@ -167,10 +169,6 @@ while camera.isOpened():
             # gain = Kp * error + Ki * error_sum
             # #old_phi = phi_desired
             # velocity = deviated_cm / np.cos(phi_desired)
-            #
-            # omega = gain
-            # vr = ((2 * velocity + omega * 7) / 2 * 3)
-            # vl = ((2 * velocity - omega * 7) / 2 * 3)
             #
             # vr = (2 * v + w * comprimento) / (2*r)
             #
