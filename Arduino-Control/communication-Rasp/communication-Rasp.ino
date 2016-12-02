@@ -30,7 +30,7 @@ const byte DEBUG = 1;
 
 // PID Globals
 PID<float> distancePID(0.5, 0.025, 0, 20); // SetPoint 20 (distance)
-PID<vector> angularPID(0.5, 0.008, 0, vector(0.0, 20.0)); // SetPoint 90 degrees
+PID<vector> angularPID(0.5, 0.004, 0, vector(0.0, 20.0)); // SetPoint 90 degrees
 
 vector oldSample(0.0, 0.0);
 long lastTime = 0;
@@ -71,6 +71,7 @@ void setup(){
   Serial.print(s.getAngle()); 
   Serial.print(" ");
   Serial.print(w);
+
   
 }
 
@@ -89,17 +90,34 @@ void loop(){
     Serial1.flush();
     
     vector sample = checkValues(sampleXY[0], sampleXY[1]);
-    
+    //vector sample(sampleXY[0], sampleXY[1]);
     // Calculate PID gains
-    angularPID.addNewSample(sample);
+    //double omega = angularPID.addNewSample(sample);
     //double distanceGain = distancePID.addNewSample(sample.calculateMagnitude());
-
-    goToPosition(sample);
     
-    if (oldSample.calculateMagnitude() > 0){
-       
-    }
+    angularPID.addNewSample(sample);
     
+    Serial.print("Omega: ");
+    Serial.print(angularPID.process());
+    Serial.println();
+    //goToPosition(sample);
+    
+//    int velocityLeftWheel = 0;
+//    int velocityRightWheel = 0;
+//    calculateWheelsVelocities(sample, velocityLeftWheel, velocityRightWheel);
+//    Serial.print("Velocity: ");
+//    Serial.print(velocityLeftWheel);
+//    Serial.print("~");
+//    Serial.print(velocityRightWheel);
+//    
+//    int dirA = 0;
+//    int dirB = 0;
+//    computePwmAndDirections(dirA, dirB, velocityRightWheel, velocityLeftWheel);
+//    
+//    Serial.print("\nPWM: ");
+//    Serial.print(velocityLeftWheel);
+//    Serial.print("~");
+//    Serial.print(velocityRightWheel);
     if (DEBUG){
       Serial.print("Vector: ");
       Serial.print(sample.xPos);Serial.print("--");Serial.print(sample.yPos);
@@ -151,12 +169,12 @@ vector checkValues(float xPos, float yPos){
       // Clear samples as it were in the begining
       result = vector();
       oldSample = result;
+      angularPID.reset();
     }
   }
   
   return result;
 }
-
 
 // Seamless to a low pass filter
 vector filterDiscrepancies(float xPos, float yPos){
@@ -216,8 +234,8 @@ void calculateWheelsVelocities(const vector targetPosition, int &leftWheel, int 
   float velocity = calculateVelocity(targetPosition);
   double omega = angularPID.process();
   
-  leftWheel = (2 * velocity - omega * DISTANCE_MOTOR_CENTER) / (2 * WHEEL_RADIUS);
-  rightWheel = (2 * velocity + omega * DISTANCE_MOTOR_CENTER) / (2 * WHEEL_RADIUS);
+  leftWheel = (2 * velocity + omega * DISTANCE_MOTOR_CENTER) / (2 * WHEEL_RADIUS);
+  rightWheel = (2 * velocity - omega * DISTANCE_MOTOR_CENTER) / (2 * WHEEL_RADIUS);
 
   if (DEBUG){
           Serial.print("Velocity\n");

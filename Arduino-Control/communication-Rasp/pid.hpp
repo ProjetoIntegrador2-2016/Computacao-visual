@@ -45,6 +45,9 @@ public:
         
         return pid;
     }
-    
+
+    void reset(){
+      I = 0;
+    }
 };
 
