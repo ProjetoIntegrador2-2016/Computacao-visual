@@ -9,10 +9,17 @@ import threading
 import ringbuffer as rb
 import struct
 import math
+import smbus
 
-SER = serial.Serial('/dev/serial0', 9600, timeout=1)  # 19200
+
+
+
+SER = serial.Serial('/dev/serial0', 19200, timeout=1)  # 19200
 
 LOCK = threading.Lock()  # Mutex for writing in serial port
+
+bus = smbus.SMBus(1)
+address = 0x04
 
 # HSV threshold for green color
 # GREEN_LOWER = [0, 137, 90]
@@ -23,7 +30,7 @@ LOCK = threading.Lock()  # Mutex for writing in serial port
 # GREEN_UPPER = [11, 151, 255]
 
 # Luv threshold for green color
-GREEN_LOWER = [0, 126, 0]
+GREEN_LOWER = [0, 120, 0]
 GREEN_UPPER = [255, 255, 255]
 
 # Constants used to calibrate the camera, in cm
@@ -43,6 +50,8 @@ COLOR_UPPER_BOUND = np.array(GREEN_UPPER, np.uint8)
 BUFFER_SIZE = 10  # At 30 fps this is 0.5 sec equivalent
 
 
+
+
 def calculate_distance(radius):
     current_distance = (OBJECT_WIDTH * FOCAL_LENGTH) / radius
     return current_distance
@@ -53,7 +62,7 @@ def calculate_deviation_cm(current_deviaton):
     return deviation_cm
 
 
-def get_distance_n_position(radius, (center_x, center_y),
+def get_distance_n_position(radius, center_x, center_y,
                             current_frame, largest_con):
     """
 
@@ -61,8 +70,8 @@ def get_distance_n_position(radius, (center_x, center_y),
     :type radius: double
     :param current_frame: OpenCV matrix of a still image
     :param largest_con: Contour of the object identified
-    :return: Distance calculated and deviation from center line
-    :rtype: (double, double)
+    :return: Distance calculated and position caught
+    :rtype: (double, char)
     """
     # This is set to prevent using caught noise as a object
     if radius > 10:
@@ -105,24 +114,26 @@ def setup_initial_vars():
     return initial_deviation, initial_distance, initial_radius
 
 
-def write_to_serial(string):
-    try:
-        with LOCK:
-            SER.write(string)
-            time.sleep(0.05)
-    except KeyboardInterrupt:
-        end_serial()
+def sendData(value):
+    bus.write_byte(address, value)
+    # bus.write_byte_data(address, 0, value)
+    return -1
+
+
+def readData():
+    state = bus.read_byte(address)
+    # number = bus.read_byte_data(address, 1)
+    return state
 
 
 def end_serial():
     print ("Closing serial ports")
-    SER.close()
+    #SER.close()
 
 
 deviation, distance, current_radius = setup_initial_vars()
 distances = rb.RingBuffer(BUFFER_SIZE)
 last_valid_teta = 0
-last_xPos = 0
 
 # if a video path was not supplied, grab the webcam
 # otherwise, grab the reference video
@@ -157,28 +168,60 @@ while camera.isOpened():
                 tetaRad = last_valid_teta
 
             # Get in Y axys (straight ahead)
-            yPos = distance_mean * (np.cos(tetaRad))
-            xPos = deviated_cm
+            yPos = int(distance_mean * (np.cos(tetaRad)))
+            xPos = int(deviated_cm)
+            
+            
+            # check slave status and send coordinates
+            state = readData()
+            if state == 1:
+                sendData(xPos)
+                sendData(yPos)
+
+            print ('x:'+ str(xPos) + 'y:' + str(yPos))
 
             # Put the space in front to assure the first float will be read
-            msg = ("%.2f, %.2f" % (xPos, yPos))
-            print msg
-            write_to_serial(msg.encode('ascii'))
+            #msg = (" %.2f, %.2f" % (xPos, yPos))
+            #print msg
+            #write_to_serial(msg.encode('ascii'))
 
-            last_xPos = xPos
+            # phi_desired = np.arctan2(yPos, deviated_cm)
+            # error = setpoint - phiqueeumedi
+            # error_sum += error
+            # gain = Kp * error + Ki * error_sum
+            # #old_phi = phi_desired
+            # velocity = deviated_cm / np.cos(phi_desired)
+            #
+            # vr = (2 * v + w * comprimento) / (2*r)
+            #
+            # if vr > 254:
+            #    vr = 250
+            #
+            # if vl > 254:
+            #    vl = 250
+            #
+            # if 19 < distance < 21:
+            #    vr = vl = 0
+            # if not vr:
+            #    vr = 0
+            # if not vl:
+            #    vl = 0
+            # ba = bytearray([int(vr), int(vl)])
+            # write_to_serial(ba)
 
-        # else:
+        else:
+            invalid_token = 'i'
+            sendData(invalid_token)
             # wait for mean
 
     else:
-        invalid_token = ("%.2f, %.2f" % (last_xPos, -1.0))
-        print invalid_token
-        write_to_serial(invalid_token.encode('ascii'))
+        invalid_token = 'i'
+        sendData(invalid_token)
 
     # print "FPS {0}".format(camera.get(cv2.CAP_PROP_FPS))
     
     # show the frame to our screen
-    #cv2.imshow("Frame", frame)
+    # cv2.imshow("Frame", frame)
     key = cv2.waitKey(1) & 0xFF
 
     # if the 'q' key is pressed, stop the loop

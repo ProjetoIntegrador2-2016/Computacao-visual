@@ -1,3 +1,5 @@
+
+#include <Wire.h>
 #include <NewPing.h>
 #include "pid.hpp"
 #include "vector.hpp"
@@ -8,7 +10,7 @@
 // Define constraints of the robot
 #define DISTANCE_MOTOR_CENTER  7
 #define WHEEL_RADIUS 3
-
+#define SLAVE_ADDRESS 0x04
 // Utrasonic sensor definitions
 #define SONAR_NUM     3
 #define MAX_DISTANCE  50 // Distancia de deteccao
@@ -26,13 +28,19 @@ const byte ECHO_L = 4;
 // Debug Constant
 const byte DEBUG = 1;
 
+#define NUM_DATA 2
+byte sampleXY[NUM_DATA];
+byte cur_data_index;
+
+byte state;
+
 // ############################### GLOBALS #######################################
 
 // PID Globals
-PID<float> distancePID(0.5, 0.025, 0, 20); // SetPoint 20 (distance)
-PID<vector> angularPID(0.5, 0.004, 0, vector(0.0, 20.0)); // SetPoint 90 degrees
+PID<int> distancePID(1, 0, 0, 20); // SetPoint 20 (distance)
+PID<vector> angularPID(1, 0, 0, vector(0, 20)); // SetPoint 90 degrees
 
-vector oldSample(0.0, 0.0);
+vector oldSample(0, 0);
 long lastTime = 0;
 
 // Ultrasonic sensors globals
@@ -51,9 +59,12 @@ NewPing sonar[SONAR_NUM] = {
 
 void setup(){
   Serial.begin(9600);
-  Serial1.begin(9600);
+  Wire.begin(SLAVE_ADDRESS);
   setupArdumoto();
-  
+
+  Wire.onReceive(receiveData);
+  Wire.onRequest(sendData);
+
  //Inicia a primeira medicao com 75ms
   pingTimer[0] = millis() + 75;
   //Define o tempo de inicializacao de cada sensor
@@ -64,7 +75,7 @@ void setup(){
   lastTime = millis();
 
   vector v(-1,-1);
-  vector s(0.0, 20.0);
+  vector s(0, 20);
   double w = s - v;
   Serial.print(v.getAngle());
   Serial.print(" ");
@@ -72,22 +83,39 @@ void setup(){
   Serial.print(" ");
   Serial.print(w);
 
+  state = 1;
+  cur_data_index = 0;
+
+  Serial.print(" ready!");
+
   
 }
 
 // ################################## LOOP ########################################
 
 void loop(){
+  delay(20);
   
+}
+
+
+void receiveData(int byteCount){
   //loopSensors();
+
+  // Update Slave Status – Occupied
+  state = 0;
   
-  float sampleXY[2];
-  if (Serial1.available() > 0){
+  while(Wire.available()){
+    Serial.print("hi ");
     
     // Read from serial
-    sampleXY[0] = Serial1.parseFloat();
-    sampleXY[1] = Serial1.parseFloat();
-    Serial1.flush();
+    sampleXY[cur_data_index++] = Wire.read();
+
+    Serial.print(sampleXY[0]);Serial.print("--");Serial.print(sampleXY[1]);
+
+    // When we have received both X and Y coordinates
+  if(cur_data_index >= NUM_DATA){
+    cur_data_index = 0;
     
     vector sample = checkValues(sampleXY[0], sampleXY[1]);
     //vector sample(sampleXY[0], sampleXY[1]);
@@ -127,15 +155,18 @@ void loop(){
     }
     
     oldSample = sample;
+
+    // Update Slave Status – Available
+    state = 1;
   }
   
-  Serial1.flush();
-  Serial.flush();
-}
+  }
+  
+  }
 
 // ############################ CONTROL METHODS ###################################
 
-vector checkValues(float xPos, float yPos){
+vector checkValues(int xPos, int yPos){
   vector result(xPos, yPos);
 
   if (yPos >= 0) {
@@ -177,11 +208,11 @@ vector checkValues(float xPos, float yPos){
 }
 
 // Seamless to a low pass filter
-vector filterDiscrepancies(float xPos, float yPos){
+vector filterDiscrepancies(int xPos, int yPos){
   vector result(xPos, yPos);
   
-  float oldX = oldSample.xPos;
-  float oldY = oldSample.yPos;
+  int oldX = oldSample.xPos;
+  int oldY = oldSample.yPos;
 
   const int errorMargin = 8;
   
@@ -210,7 +241,7 @@ vector filterDiscrepancies(float xPos, float yPos){
 
 
 void goToPosition(vector targetPosition){
-  vector nullVector(0.0, 0.0);
+  vector nullVector(0, 0);
   
   if (targetPosition != nullVector){
     int velocityLeftWheel = 0;
@@ -231,7 +262,7 @@ void goToPosition(vector targetPosition){
 
 
 void calculateWheelsVelocities(const vector targetPosition, int &leftWheel, int &rightWheel){
-  float velocity = calculateVelocity(targetPosition);
+  int velocity = calculateVelocity(targetPosition);
   double omega = angularPID.process();
   
   leftWheel = (2 * velocity + omega * DISTANCE_MOTOR_CENTER) / (2 * WHEEL_RADIUS);
@@ -345,6 +376,11 @@ void differentialDrive() {
     //If the two wheels are spinning with the same speed, 
     //but in opposite directions, the robot will rotate in place, 
     //spinning around the midpoint between the two wheels.
+}
+
+// callback for sending data
+void sendData(){
+  Wire.write(state);
 }
 
 
