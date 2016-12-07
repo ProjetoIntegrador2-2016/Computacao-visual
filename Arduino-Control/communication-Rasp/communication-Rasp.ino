@@ -211,27 +211,6 @@ vector filterDiscrepancies(float xPos, float yPos){
 }
 
 
-void goToPosition(vector targetPosition){
-  vector nullVector(0.0, 0.0);
-
-  if (targetPosition != nullVector){
-    int velocityLeftWheel = 0;
-    int velocityRightWheel = 0;
-    calculateWheelsVelocities(targetPosition, velocityLeftWheel, velocityRightWheel);
-
-    int dirA = 0;
-    int dirB = 0;
-    computePwmAndDirections(dirA, dirB, velocityRightWheel, velocityLeftWheel);
-
-    driveArdumoto(MOTOR_A, dirA, velocityRightWheel);
-    driveArdumoto(MOTOR_B, dirB, velocityLeftWheel);
-
-  } else {
-    stopRobot();
-  }
-}
-
-
 void calculateWheelsVelocities(const vector targetPosition, int &leftWheel, int &rightWheel){
   float velocity = calculateVelocity(targetPosition);
   double omega = angularPID.process();
