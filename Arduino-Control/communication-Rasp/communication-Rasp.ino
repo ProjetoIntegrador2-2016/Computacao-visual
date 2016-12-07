@@ -16,21 +16,22 @@
 #define PING_INTERVAL 33 //Intervalo entre as medicoes - valor minimo 29ms
 
 // Pin definitions for Ultrasonic sensors
-const byte TRIGGER_F = 7;
-const byte ECHO_F = 6;
-const byte TRIGGER_R = 10;
-const byte ECHO_R = 9;
-const byte TRIGGER_L = 5;
-const byte ECHO_L = 4;
+const byte TRIGGER_F = 25;
+const byte ECHO_F = 24;
+const byte TRIGGER_R = 29;
+const byte ECHO_R = 28;
+const byte TRIGGER_L = 23;
+const byte ECHO_L = 22;
 
 // Debug Constant
-const byte DEBUG = 1;
+const byte DEBUG = 0;
+vector setpoint(0.0, 20.0);
 
 // ############################### GLOBALS #######################################
 
 // PID Globals
 PID<float> distancePID(0.5, 0.025, 0, 20); // SetPoint 20 (distance)
-PID<vector> angularPID(0.5, 0.004, 0, vector(0.0, 20.0)); // SetPoint 90 degrees
+PID<vector> angularPID(0.5, 0.004, 0, setpoint); // SetPoint 90 degrees
 
 vector oldSample(0.0, 0.0);
 long lastTime = 0;
@@ -63,15 +64,7 @@ void setup(){
     
   lastTime = millis();
 
-  vector v(-1,-1);
-  vector s(0.0, 20.0);
-  double w = s - v;
-  Serial.print(v.getAngle());
-  Serial.print(" ");
-  Serial.print(s.getAngle()); 
-  Serial.print(" ");
-  Serial.print(w);
-
+  Serial.print("Ready to roll!");
   
 }
 
@@ -79,11 +72,11 @@ void setup(){
 
 void loop(){
   
-  //loopSensors();
+  loopSensors();
   
   float sampleXY[2];
+  
   if (Serial1.available() > 0){
-    
     // Read from serial
     sampleXY[0] = Serial1.parseFloat();
     sampleXY[1] = Serial1.parseFloat();
@@ -91,16 +84,18 @@ void loop(){
     
     vector sample = checkValues(sampleXY[0], sampleXY[1]);
     //vector sample(sampleXY[0], sampleXY[1]);
+    
+    
     // Calculate PID gains
-    //double omega = angularPID.addNewSample(sample);
+    double omega = angularPID.addNewSample(sample);
     //double distanceGain = distancePID.addNewSample(sample.calculateMagnitude());
     
-    angularPID.addNewSample(sample);
+    //angularPID.addNewSample(sample);
     
     Serial.print("Omega: ");
     Serial.print(angularPID.process());
     Serial.println();
-    //goToPosition(sample);
+    goToPosition(sample);
     
 //    int velocityLeftWheel = 0;
 //    int velocityRightWheel = 0;
@@ -297,7 +292,7 @@ void loopSensors(){
       if (i == 0 && currentSensor == SONAR_NUM - 1){
         oneSensorCycle();
       }
-      
+      delay(10);
       sonar[currentSensor].timer_stop();
       currentSensor = i;
       cm[currentSensor] = 0;

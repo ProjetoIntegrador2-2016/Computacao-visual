@@ -1,3 +1,5 @@
+#include <math.h>
+
 // Generic PID class
 template <class T>
 class PID{
@@ -8,7 +10,7 @@ public:
     T lastSample;
     double kP, kI, kD;
     double I;
-    
+    double lastPid;
     T setPoint;
     long lastProcess;
     
@@ -17,6 +19,7 @@ public:
         kI = _kI;
         kD = _kD;
         I = 0;
+        lastPid = 0;
         setSetPoint(_set);
     }
     
@@ -31,23 +34,34 @@ public:
     }
     
     double process(){
+        double pid = 0;
+      
         error = setPoint - sample;
+
+        if (!isnan(error)){ 
+          
+          float deltaTime = (millis() - lastProcess) / 1000.0;
+          lastProcess = millis();
+          
+          double P = error * kP;
+          I = I + (error * kI) * deltaTime;
+          double D = (lastSample - sample) * kD / deltaTime;
+          lastSample = sample;
+          
+          pid = P + I + D;
+          lastPid = pid;
+          
+        } else {
+          pid = lastPid;  
         
-        float deltaTime = (millis() - lastProcess) / 1000.0;
-        lastProcess = millis();
-        
-        double P = error * kP;
-        I = I + (error * kI) * deltaTime;
-        double D = (lastSample - sample) * kD / deltaTime;
-        lastSample = sample;
-        
-        double pid = P + I + D;
+        }
         
         return pid;
     }
 
     void reset(){
       I = 0;
+      lastPid = 0;
     }
 };
 
