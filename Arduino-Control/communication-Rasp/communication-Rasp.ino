@@ -272,62 +272,49 @@ void computePwmAndDirections(int &dirA, int &dirB, int &pwmA, int &pwmB){
 
 targetDirection = FOWARD;
 
-void goToPosition(vector targetPosition){
+void followTarget(vector targetPosition){
   vector nullVector(0.0, 0.0);
 
   if (targetPosition != nullVector){
-    detectObstacles(targetPosition);
     moveCart(targetPosition);
   } else {
     stopRobot();
   }
 }
 
-void detectObstacles(targetPosition){
+void moveCart(targetPosition){
   loopSensors();
   targetDirection = detectDirection(targetPosition);
-  if (targetDirection == RIGHT){
-    if (MIN_DISTANCE => cm[RIGHT_SENSOR]){
-      deflectObstacleStatically(RIGHT);
-    }
-  } else if (targetDirection == LEFT){
-    if (MIN_DISTANCE => cm[LEFT_SENSOR]){
-      deflectObstacleStatically(LEFT);
-  } else if (targetPosition == FOWARD){
-    if (MIN_DISTANCE => cm[FOWARD_SENSOR]){
-      //stopRobot()
-    }
-  }
-}
-
-void detectDirection(targetPosition){
   double omega = angularPID.process();
-  if (omega > ARBITRARY){
-    targetDirection = RIGHT;
-  } else if (omega < -ARBITRARY){
-    targetDirection = LEFT;
-  } else {
-    targetDirection = FOWARD;
+
+  if (omega > ARBITRARY){ // if the target is in the right
+    if (MIN_DISTANCE => cm[RIGHT_SENSOR]){ // if an obstacle is found in the right
+      avoidObstacle(RIGHT);
+    }
+  } else if (omega < -ARBITRARY){ // if the target is in the left
+    if (MIN_DISTANCE => cm[LEFT_SENSOR]){// if an obstacle is found in the left
+      avoidObstacle(LEFT);
+    }
+  } else if (MIN_DISTANCE => cm[FOWARD_SENSOR]){ // if an obstacle is found foward
+    stopRobot();
+  } else { // if no obstacle is found
+    moveCart(targetPosition);
   }
-  return targetDirection;
 }
 
-
-void deflectObstacleStatically(obstacleDirection){
+void avoidObstacle(obstacleDirection, targetPosition){
   if (obstacleDirection == RIGHT){
-    driveArdumoto(MOTOR_A, CW, velocityRightWheel); //setar o velocityRightWheel
-    driveArdumoto(MOTOR_B, CW, velocityLeftWheel); //setar o velocityLeftWheel
+    obstacleVector = (cm[RIGHT_SENSOR], 0.0);
+    adjustedVector = targetPosition - obstacleVector;
+    goToPosition(adjustedVector);
   } else if (obstacleDirection == LEFT){
-    driveArdumoto(MOTOR_A, CW, velocityRightWheel); //setar o velocityRightWheel
-    driveArdumoto(MOTOR_B, CW, velocityLeftWheel); //setar o velocityLeftWheel
-  } else { //obstáculo a frente
-    //stopRobot();
+    obstacleVector = (-cm[RIGHT_SENSOR], 0.0);
+    adjustedVector = targetPosition - obstacleVector;
+    goToPosition(adjustedVector);
   }
 }
 
-
-
-void moveCart(vector targetPosition){
+void goToPosition(vector targetPosition){
   int velocityLeftWheel = 0;
   int velocityRightWheel = 0;
   calculateWheelsVelocities(targetPosition, velocityLeftWheel, velocityRightWheel);
@@ -339,12 +326,6 @@ void moveCart(vector targetPosition){
   driveArdumoto(MOTOR_A, dirA, velocityRightWheel);
   driveArdumoto(MOTOR_B, dirB, velocityLeftWheel);
 }
-
-//
-void deflectObstacleDinamically(targetPosition){
-  moveCart(targetPosition);
-}
-
 
 void loopSensors(){
   for (uint8_t i = 0; i < SONAR_NUM; i++) {
