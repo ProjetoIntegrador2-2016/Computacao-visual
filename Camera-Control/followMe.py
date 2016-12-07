@@ -23,7 +23,7 @@ LOCK = threading.Lock()  # Mutex for writing in serial port
 # GREEN_UPPER = [11, 151, 255]
 
 # Luv threshold for green color
-GREEN_LOWER = [0, 126, 0]
+GREEN_LOWER = [0, 136, 0]
 GREEN_UPPER = [255, 255, 255]
 
 # Constants used to calibrate the camera, in cm
@@ -129,7 +129,7 @@ last_xPos = 0
 camera = cv2.VideoCapture(0)
 if camera.isOpened():
     (grab, frame) = camera.read()
-    #cv2.imshow("Frame", frame)
+    cv2.imshow("Frame", frame)
     time.sleep(0.001)  # Time to warm up the camera
 
 while camera.isOpened():
@@ -161,7 +161,7 @@ while camera.isOpened():
             xPos = deviated_cm
 
             # Put the space in front to assure the first float will be read
-            msg = ("%.2f, %.2f" % (xPos, yPos))
+            msg = ("%.2f %.2f\n" % (xPos, yPos))
             print msg
             write_to_serial(msg.encode('ascii'))
 
@@ -171,14 +171,14 @@ while camera.isOpened():
             # wait for mean
 
     else:
-        invalid_token = ("%.2f, %.2f" % (last_xPos, -1.0))
+        invalid_token = (" %.2f %.2f/n" % (last_xPos, -1.0))
         print invalid_token
         write_to_serial(invalid_token.encode('ascii'))
 
     # print "FPS {0}".format(camera.get(cv2.CAP_PROP_FPS))
     
     # show the frame to our screen
-    #cv2.imshow("Frame", frame)
+    cv2.imshow("Frame", frame)
     key = cv2.waitKey(1) & 0xFF
 
     # if the 'q' key is pressed, stop the loop
