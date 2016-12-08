@@ -10,6 +10,15 @@
 const byte PWMA = 12;  // PWM control (speed) for motor A
 const byte PWMB = 13; // PWM control (speed) for motor B
 
+void softStartMotors(int pwmA, int pwmB){
+
+  for (int i = 0; i < max(pwmA, pwmB); i++){
+    driveArdumoto(MOTOR_A, i);
+    driveArdumoto(MOTOR_B, i);
+  }
+  
+}
+
 // driveArdumoto drives 'motor' in 'dir' direction at 'spd' speed
 void driveArdumoto(byte motor, byte spd) {
   if (motor == MOTOR_A) {

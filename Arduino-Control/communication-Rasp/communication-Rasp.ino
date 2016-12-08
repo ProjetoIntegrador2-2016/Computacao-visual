@@ -25,7 +25,7 @@ const byte ECHO_L = 22;
 
 // Debug Constant
 const byte DEBUG = 2;
-vector setpoint(0.0, 20.0);
+vector setpoint(0.0, 30.0);
 
 // ############################### GLOBALS #######################################
 
@@ -83,36 +83,16 @@ void loop(){
     Serial1.flush();
     
     vector sample = checkValues(sampleXY[0], sampleXY[1]);
-    //vector sample(sampleXY[0], sampleXY[1]);
-    
     
     // Calculate PID gains
-    double omega = setpoint - sample; //angularPID.addNewSample(sample);
-    //double distanceGain = distancePID.addNewSample(sample.calculateMagnitude());
-    
-    //angularPID.addNewSample(sample);
+    double omega = angularPID.addNewSample(sample);
     
     Serial.print("Omega: ");
     Serial.print(omega);
     Serial.println();
+    
     goToPosition(sample);
     
-//    int velocityLeftWheel = 0;
-//    int velocityRightWheel = 0;
-//    calculateWheelsVelocities(sample, velocityLeftWheel, velocityRightWheel);
-//    Serial.print("Velocity: ");
-//    Serial.print(velocityLeftWheel);
-//    Serial.print("~");
-//    Serial.print(velocityRightWheel);
-//    
-//    int dirA = 0;
-//    int dirB = 0;
-//    computePwmAndDirections(dirA, dirB, velocityRightWheel, velocityLeftWheel);
-//    
-//    Serial.print("\nPWM: ");
-//    Serial.print(velocityLeftWheel);
-//    Serial.print("~");
-//    Serial.print(velocityRightWheel);
     if (DEBUG){
       Serial.print("Vector: ");
       Serial.print(sample.xPos);Serial.print("--");Serial.print(sample.yPos);
@@ -122,10 +102,9 @@ void loop(){
     }
     
     oldSample = sample;
-  }
+    
+  } // end Serial available
   
-  Serial1.flush();
-  Serial.flush();
 }
 
 // ############################ CONTROL METHODS ###################################
@@ -143,7 +122,9 @@ vector checkValues(float xPos, float yPos){
     if (oldSample.calculateMagnitude() != 0){ 
       goToPosition(oldSample);
       delay(500); // Wait 0.5 s for target to appear
+      
       oldSample = vector();
+      result = oldSample;
       
     } else { // Search target
       int dirA = 100;
@@ -154,13 +135,15 @@ vector checkValues(float xPos, float yPos){
       } else { // Last position to the right, spin right
         dirA = 0;
       }
-      
+
+      softStartMotors(dirA, dirB);
       driveArdumoto(MOTOR_A, dirA);
       driveArdumoto(MOTOR_B, dirB);
   
       // Spin for 0.5 s then look for target
-      delay(500); 
+      delay(200); 
       stopRobot();
+      delay(500);
       
       // Clear samples as it were in the begining
       result = vector();
@@ -179,13 +162,13 @@ vector filterDiscrepancies(float xPos, float yPos){
   float oldX = oldSample.xPos;
   float oldY = oldSample.yPos;
 
-  const int errorMargin = 800;
+  const int errorMargin = 10;
   
   // Check if new Pos is between the acceptable erro margin
   // only if the oldSample is bigger than (0, 0)
   if (oldSample.calculateMagnitude() != 0){
     
-    if (xPos <= oldX + errorMargin && xPos >= oldX - errorMargin){
+    if (xPos >= oldX - errorMargin && xPos <= oldX + errorMargin){
       // Looks good, do nothing
     } else {
       result.xPos = oldX;  
@@ -227,7 +210,7 @@ void goToPosition(vector targetPosition){
 
 void calculateWheelsVelocities(vector targetPosition, int &leftWheel, int &rightWheel){
   float velocity = calculateVelocity(targetPosition);
-  double omega = setpoint - targetPosition; //angularPID.process();
+  double omega = angularPID.process();
   
   leftWheel = (2 * velocity + omega * DISTANCE_MOTOR_CENTER) / (2 * WHEEL_RADIUS);
   rightWheel = (2 * velocity - omega * DISTANCE_MOTOR_CENTER) / (2 * WHEEL_RADIUS);
