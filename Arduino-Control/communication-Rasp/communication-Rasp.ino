@@ -17,7 +17,8 @@
 
 int state = 0;
 vector old(0, 0);
-
+long lastTime;
+long waitTime = 1000;
 
 // Pin definitions for Ultrasonic sensors
 const byte TRIGGER_F = 25;
@@ -27,14 +28,15 @@ const byte ECHO_R = 28;
 const byte TRIGGER_L = 23;
 const byte ECHO_L = 22;
 
-vector setpoint(0.0, 30.0);
+vector setpoint(0.0, 50.0);
 
 void setup(){
   
   Serial.begin(9600);
   Serial1.begin(9600);
   setupArdumoto();
-
+  lastTime = millis();
+  
   Serial.print("Ready to roll!");
   
 }
@@ -60,8 +62,9 @@ void loop(){
     Serial.print(sampleXY[1]);
     Serial.print("\n");
 
-
-    if (sampleXY[1] > 0 ) {
+    if (lastTime + waitTime <= millis()){
+      
+      if (sampleXY[1] > 0 ) {
          
          if(sampleXY[0]>=-8.0 && sampleXY[0]<=8.0){
             goFoward(sample);
@@ -73,7 +76,7 @@ void loop(){
 
         old=sample;  
   
-     } else { // Target not found, go to last known position then search it
+      } else { // Target not found, go to last known position then search it
         
         int dirA = 50;
         int dirB = 50;
@@ -98,10 +101,17 @@ void loop(){
 
         delay(50); 
         stopRobot();
-        delay(1000);
+        lastTime = millis();
+        waitTime = 1000;
    
-      }
-}
+      } 
+       
+    } else {
+      Serial.print("Wait time...\n");
+    }
+    
+    
+  }
 
 }
 
@@ -112,7 +122,7 @@ void goFoward(vector targetPosition){
   vector nullVector(0.0, 0.0);
 
 
-  int velocityLeftWheel = 10.0;
+  int velocityLeftWheel = 20.0;
   int velocityRightWheel = 80.0;
 
   
@@ -148,7 +158,7 @@ void goLeft(vector targetPosition){
   vector nullVector(0.0, 0.0);
 
 
-  int velocityLeftWheel = 10.0;
+  int velocityLeftWheel = 20.0;
   int velocityRightWheel = 80.0 + 40.0;
 
   
@@ -184,7 +194,7 @@ void goRight(vector targetPosition){
   vector nullVector(0.0, 0.0);
 
 
-  int velocityLeftWheel = 10.0 + 40.0;
+  int velocityLeftWheel = 20.0 + 40.0;
   int velocityRightWheel = 80.0 ;
 
   
