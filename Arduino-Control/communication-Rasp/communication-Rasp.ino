@@ -12,8 +12,12 @@
 // Utrasonic sensor definitions
 #define SONAR_NUM     3
 #define MAX_DISTANCE  90 // Distancia de deteccao
-#define MIN_DISTANCE  30
+#define MIN_DISTANCE  50
 #define PING_INTERVAL 33 //Intervalo entre as medicoes - valor minimo 29ms
+
+int state = 0;
+vector old(0, 0);
+
 
 // Pin definitions for Ultrasonic sensors
 const byte TRIGGER_F = 25;
@@ -23,46 +27,13 @@ const byte ECHO_R = 28;
 const byte TRIGGER_L = 23;
 const byte ECHO_L = 22;
 
-// Debug Constant
-const byte DEBUG = 2;
-vector setpoint(0.0, 20.0);
-
-// ############################### GLOBALS #######################################
-
-// PID Globals
-PID<float> distancePID(0.5, 0.025, 0, 20); // SetPoint 20 (distance)
-PID<vector> angularPID(0.5, 0.004, 0, setpoint); // SetPoint 90 degrees
-
-vector oldSample(0.0, 0.0);
-long lastTime = 0;
-
-// Ultrasonic sensors globals
-unsigned long pingTimer[SONAR_NUM]; // Vezes que a medicao deve ocorrer
-unsigned int cm[SONAR_NUM]; //Armazena o numero de medicoes
-uint8_t currentSensor = 0; // Armazena o numero do sensor ativo
-
-// Assign Ultrassonic sensors to pins
-NewPing sonar[SONAR_NUM] = { 
-  NewPing(TRIGGER_F, ECHO_F, MAX_DISTANCE),
-  NewPing(TRIGGER_R, ECHO_R, MAX_DISTANCE),
-  NewPing(TRIGGER_L, ECHO_L, MAX_DISTANCE),
-};
-
-// ################################# SETUP ########################################
+vector setpoint(0.0, 30.0);
 
 void setup(){
+  
   Serial.begin(9600);
   Serial1.begin(9600);
   setupArdumoto();
-  
- //Inicia a primeira medicao com 75ms
-  pingTimer[0] = millis() + 75;
-  //Define o tempo de inicializacao de cada sensor
-  for (uint8_t i = 1; i < SONAR_NUM; i++){
-    pingTimer[i] = pingTimer[i - 1] + PING_INTERVAL;
-  }
-    
-  lastTime = millis();
 
   Serial.print("Ready to roll!");
   
@@ -72,7 +43,6 @@ void setup(){
 
 void loop(){
   
-  //loopSensors();
   
   float sampleXY[2];
   
@@ -80,270 +50,170 @@ void loop(){
     // Read from serial
     sampleXY[0] = Serial1.parseFloat();
     sampleXY[1] = Serial1.parseFloat();
-    Serial1.flush();
     
-    vector sample = checkValues(sampleXY[0], sampleXY[1]);
-    //vector sample(sampleXY[0], sampleXY[1]);
-    
-    
-    // Calculate PID gains
-    double omega = setpoint - sample; //angularPID.addNewSample(sample);
-    //double distanceGain = distancePID.addNewSample(sample.calculateMagnitude());
-    
-    //angularPID.addNewSample(sample);
-    
-    Serial.print("Omega: ");
-    Serial.print(omega);
-    Serial.println();
-    goToPosition(sample);
-    
-//    int velocityLeftWheel = 0;
-//    int velocityRightWheel = 0;
-//    calculateWheelsVelocities(sample, velocityLeftWheel, velocityRightWheel);
-//    Serial.print("Velocity: ");
-//    Serial.print(velocityLeftWheel);
-//    Serial.print("~");
-//    Serial.print(velocityRightWheel);
-//    
-//    int dirA = 0;
-//    int dirB = 0;
-//    computePwmAndDirections(dirA, dirB, velocityRightWheel, velocityLeftWheel);
-//    
-//    Serial.print("\nPWM: ");
-//    Serial.print(velocityLeftWheel);
-//    Serial.print("~");
-//    Serial.print(velocityRightWheel);
-    if (DEBUG){
-      Serial.print("Vector: ");
-      Serial.print(sample.xPos);Serial.print("--");Serial.print(sample.yPos);
-      Serial.print("\nSamples: ");
-      Serial.print(sampleXY[0]);Serial.print("--");Serial.print(sampleXY[1]);
-      Serial.print("\n\n");
-    }
-    
-    oldSample = sample;
-  }
+    //vector sample = checkValues(sampleXY[0], sampleXY[1]);
+    vector sample(sampleXY[0], sampleXY[1]);
+    Serial.print("X position: ");
+    Serial.print(sampleXY[0]);
+    Serial.print("----");
+    Serial.print("Y position: ");
+    Serial.print(sampleXY[1]);
+    Serial.print("\n");
+
+
+    if (sampleXY[1] > 0 ) {
+         
+         if(sampleXY[0]>=-8.0 && sampleXY[0]<=8.0){
+            goFoward(sample);
+        }else if (sampleXY[0]<-8.0){
+           goLeft(sample);
+        }else{
+            goRight(sample);
+        }
+
+        old=sample;  
   
-  Serial1.flush();
-  Serial.flush();
+     } else { // Target not found, go to last known position then search it
+        
+        int dirA = 50;
+        int dirB = 50;
+        
+        if (old.xPos < 0){ // Last position is to the left
+          dirB = 0;
+        } else { // Last position to the right, spin right
+          dirA = 0;
+        }
+        
+        for(int i = 0 ; i< 80; i++){
+          
+          if (dirA > 0){
+            driveArdumoto(MOTOR_A, i);
+            delay(5); 
+          } else {
+            driveArdumoto(MOTOR_B, i+20);
+            delay(5); 
+          } 
+          
+         }
+
+        delay(50); 
+        stopRobot();
+        delay(1000);
+   
+      }
+}
+
 }
 
 // ############################ CONTROL METHODS ###################################
 
-vector checkValues(float xPos, float yPos){
-  vector result(xPos, yPos);
 
-  if (yPos >= 0) {
-    // Looks good, no invalid token
-    result = filterDiscrepancies(xPos, yPos);
-  
-  } else { // Target not found, go to last known position then search it
-    
-    // If there is a last known position, go to it
-    if (oldSample.calculateMagnitude() != 0){ 
-      goToPosition(oldSample);
-      delay(500); // Wait 0.5 s for target to appear
-      oldSample = vector();
-      
-    } else { // Search target
-      int dirA = 100;
-      int dirB = 100;
-      
-      if (xPos < 0){ // Last position is to the left
-        dirB = 0;
-      } else { // Last position to the right, spin right
-        dirA = 0;
-      }
-      
-      driveArdumoto(MOTOR_A, dirA);
-      driveArdumoto(MOTOR_B, dirB);
-  
-      // Spin for 0.5 s then look for target
-      delay(500); 
-      stopRobot();
-      
-      // Clear samples as it were in the begining
-      result = vector();
-      oldSample = result;
-      angularPID.reset();
-    }
-  }
-  
-  return result;
-}
-
-// Seamless to a low pass filter
-vector filterDiscrepancies(float xPos, float yPos){
-  vector result(xPos, yPos);
-  
-  float oldX = oldSample.xPos;
-  float oldY = oldSample.yPos;
-
-  const int errorMargin = 800;
-  
-  // Check if new Pos is between the acceptable erro margin
-  // only if the oldSample is bigger than (0, 0)
-  if (oldSample.calculateMagnitude() != 0){
-    
-    if (xPos <= oldX + errorMargin && xPos >= oldX - errorMargin){
-      // Looks good, do nothing
-    } else {
-      result.xPos = oldX;  
-    }
-
-    if (yPos <= oldY + errorMargin && yPos >= oldY - errorMargin){
-      // Looks good, do nothing
-    } else {
-      result.yPos = oldY;  
-    }
-    
-  } else {
-    // Do nothing
-  }
-
-  return result;
-}
-
-
-void goToPosition(vector targetPosition){
+void goFoward(vector targetPosition){
   vector nullVector(0.0, 0.0);
+
+
+  int velocityLeftWheel = 10.0;
+  int velocityRightWheel = 80.0;
+
   
   if (targetPosition != nullVector && targetPosition.calculateMagnitude() > MIN_DISTANCE){
-    int velocityLeftWheel = 0;
-    int velocityRightWheel = 0;
-    
-    calculateWheelsVelocities(targetPosition, velocityLeftWheel, velocityRightWheel);
-    
-    computePwmAndDirections(velocityRightWheel, velocityLeftWheel);
-  
-    driveArdumoto(MOTOR_A, velocityRightWheel);
-    driveArdumoto(MOTOR_B, velocityLeftWheel);
-  
-  } else {
-    stopRobot();  
-  }
-}
-
-
-void calculateWheelsVelocities(vector targetPosition, int &leftWheel, int &rightWheel){
-  float velocity = calculateVelocity(targetPosition);
-  double omega = setpoint - targetPosition; //angularPID.process();
-  
-  leftWheel = (2 * velocity + omega * DISTANCE_MOTOR_CENTER) / (2 * WHEEL_RADIUS);
-  rightWheel = (2 * velocity - omega * DISTANCE_MOTOR_CENTER) / (2 * WHEEL_RADIUS);
-
-  if (DEBUG == 1){
+    if (state ==1){
           
-          Serial.print("VL = ");
-          Serial.print(leftWheel);
-          Serial.println();
-          Serial.print("VR = ");
-          Serial.print(rightWheel);
-          Serial.println();
-          /*
-          Serial.print("Velocity\n");
-          Serial.print("VL ");Serial.print(leftWheel);Serial.print(" = (2 * ");
-          Serial.print(velocity);Serial.print(" - ");Serial.print(omega);
-          Serial.print(" * 48) / ( 2 * 6)\n");
-          Serial.print("VR ");Serial.print(rightWheel);Serial.print(" = (2 * ");
-          Serial.print(velocity);Serial.print(" + ");Serial.print(omega);
-          Serial.print(" * 48) / ( 2 * 6)\n");
-          */
-  }
-  
-}
+            driveArdumoto(MOTOR_A, velocityRightWheel);
+            driveArdumoto(MOTOR_B, velocityLeftWheel);
+    }else{
+            int velocityLeftWheel = 0;
+            int velocityRightWheel = 0;
 
+            for(int i = 0 ; i< 255; i++){
+          
+            driveArdumoto(MOTOR_A, i);
+            driveArdumoto(MOTOR_B, i);
+            }
 
-// Check direction for motors and assign correct speed
-void computePwmAndDirections(int &pwmA, int &pwmB){
-  const int pwmGain = 0;
-  const int pwmAGainConstant = 30 + pwmGain;
-  const int pwmBGainConstant = 0 + pwmGain;
-  
-  if (pwmA > 0){ // Go foward
-    pwmA += pwmAGainConstant;
-    //dirA = CW;
-  
-  } else {
-    pwmA = 0;
-  }
-  
-  if (pwmB > 0){
-    pwmB += pwmBGainConstant;
-    //dirB = CW;
-  
-  } else {
-    pwmB = 0;
-  }
+            driveArdumoto(MOTOR_A, velocityRightWheel);
+            driveArdumoto(MOTOR_B, velocityLeftWheel);
 
-  if (DEBUG == 2){
-    Serial.print("PWMs:");Serial.print(pwmB);Serial.print("~");Serial.print(pwmA);
-    Serial.print("\n");
-  }
-
-}
-
-// ############################ ULTRASONIC METHODS ################################
-
-void loopSensors(){
-  for (uint8_t i = 0; i < SONAR_NUM; i++) {
-    if (millis() >= pingTimer[i]) {         
-      pingTimer[i] += PING_INTERVAL * SONAR_NUM;  
-     
-      if (i == 0 && currentSensor == SONAR_NUM - 1){
-        oneSensorCycle();
+            state =1; 
+            
       }
-      delay(10);
-      sonar[currentSensor].timer_stop();
-      currentSensor = i;
-      cm[currentSensor] = 0;
-      sonar[currentSensor].ping_timer(echoCheck);
-    }
+  
+  } else {
+    stopRobot();
+    state =0 ;  
   }
 }
 
+void goLeft(vector targetPosition){
+  vector nullVector(0.0, 0.0);
 
-//Se receber um sinal (eco), calcula a distancia
-void echoCheck() { 
-  if (sonar[currentSensor].check_timer()) {
-    cm[currentSensor] = sonar[currentSensor].ping_result / US_ROUNDTRIP_CM;
+
+  int velocityLeftWheel = 10.0;
+  int velocityRightWheel = 80.0 + 40.0;
+
+  
+  if (targetPosition != nullVector && targetPosition.calculateMagnitude() > MIN_DISTANCE){
+    if (state ==1){
+          
+            driveArdumoto(MOTOR_A, velocityRightWheel);
+            driveArdumoto(MOTOR_B, velocityLeftWheel);
+    }else{
+            int velocityLeftWheel = 0;
+            int velocityRightWheel = 0;
+
+            for(int i = 0 ; i< 255; i++){
+          
+            driveArdumoto(MOTOR_A, i);
+            driveArdumoto(MOTOR_B, i);
+            }
+
+            driveArdumoto(MOTOR_A, velocityRightWheel);
+            driveArdumoto(MOTOR_B, velocityLeftWheel);
+
+            state =1; 
+            
+      }
+  
+  } else {
+    stopRobot();
+    state =0 ;  
   }
 }
 
+void goRight(vector targetPosition){
+  vector nullVector(0.0, 0.0);
 
-void oneSensorCycle() { 
-  // Ciclo de leitura do sensor
-  for (uint8_t i = 0; i < SONAR_NUM; i++) {
-    //Imprime os valores lidos pelos sensores, no serial monitor
-    if(DEBUG == 3){
-      Serial.print("Sensor : ");
-      Serial.print(i); 
-      Serial.print(" = ");
-      Serial.print(cm[i]);
-      Serial.print(" cm - ");
-    }
+
+  int velocityLeftWheel = 10.0 + 40.0;
+  int velocityRightWheel = 80.0 ;
+
+  
+  if (targetPosition != nullVector && targetPosition.calculateMagnitude() > MIN_DISTANCE){
+    if (state ==1){
+          
+            driveArdumoto(MOTOR_A, velocityRightWheel);
+            driveArdumoto(MOTOR_B, velocityLeftWheel);
+    }else{
+            int velocityLeftWheel = 0;
+            int velocityRightWheel = 0;
+
+            for(int i = 0 ; i< 255; i++){
+          
+            driveArdumoto(MOTOR_A, i);
+            driveArdumoto(MOTOR_B, i);
+            }
+
+            driveArdumoto(MOTOR_A, velocityRightWheel);
+            driveArdumoto(MOTOR_B, velocityLeftWheel);
+
+            state =1; 
+            
+      }
+  
+  } else {
+    stopRobot();
+    state =0 ;  
   }
-  Serial.println();
 }
-
-
-void differentialDrive() {
-    //When the two wheels are spinning in the same direction 
-    //and the same speed, the robot will move straight.
-    
-    //driveArdumoto(MOTOR_A, )
-    //driveArdumoto(MOTOR_B, )
-    
-    //When the two wheels are spinning in the same direction, 
-    //but with different speeds, the robot will turn away from 
-    //the faster motor. For example, if the right wheel is spinning 
-    //faster than the left, the motor will turn left.
-    
-    
-    //If the two wheels are spinning with the same speed, 
-    //but in opposite directions, the robot will rotate in place, 
-    //spinning around the midpoint between the two wheels.
-}
-
 
 
