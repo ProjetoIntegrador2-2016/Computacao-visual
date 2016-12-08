@@ -6,13 +6,13 @@
 // ############################### CONSTANTS ########################################
 
 // Define constraints of the robot
-#define DISTANCE_MOTOR_CENTER  7
-#define WHEEL_RADIUS 3
+#define DISTANCE_MOTOR_CENTER  48
+#define WHEEL_RADIUS 6
 
 // Utrasonic sensor definitions
 #define SONAR_NUM     3
-#define MAX_DISTANCE  50 // Distancia de deteccao
-#define MIN_DISTANCE  20
+#define MAX_DISTANCE  90 // Distancia de deteccao
+#define MIN_DISTANCE  30
 #define PING_INTERVAL 33 //Intervalo entre as medicoes - valor minimo 29ms
 
 // Pin definitions for Ultrasonic sensors
@@ -24,7 +24,7 @@ const byte TRIGGER_L = 23;
 const byte ECHO_L = 22;
 
 // Debug Constant
-const byte DEBUG = 0;
+const byte DEBUG = 2;
 vector setpoint(0.0, 20.0);
 
 // ############################### GLOBALS #######################################
@@ -72,7 +72,7 @@ void setup(){
 
 void loop(){
   
-  loopSensors();
+  //loopSensors();
   
   float sampleXY[2];
   
@@ -87,13 +87,13 @@ void loop(){
     
     
     // Calculate PID gains
-    double omega = angularPID.addNewSample(sample);
+    double omega = setpoint - sample; //angularPID.addNewSample(sample);
     //double distanceGain = distancePID.addNewSample(sample.calculateMagnitude());
     
     //angularPID.addNewSample(sample);
     
     Serial.print("Omega: ");
-    Serial.print(angularPID.process());
+    Serial.print(omega);
     Serial.println();
     goToPosition(sample);
     
@@ -143,22 +143,23 @@ vector checkValues(float xPos, float yPos){
     if (oldSample.calculateMagnitude() != 0){ 
       goToPosition(oldSample);
       delay(500); // Wait 0.5 s for target to appear
+      oldSample = vector();
       
     } else { // Search target
-      int dirA = CW;
-      int dirB = CW;
+      int dirA = 100;
+      int dirB = 100;
       
       if (xPos < 0){ // Last position is to the left
-        dirB = CCW;
+        dirB = 0;
       } else { // Last position to the right, spin right
-        dirA = CCW;
+        dirA = 0;
       }
       
-      driveArdumoto(MOTOR_A, dirA, 100);
-      driveArdumoto(MOTOR_B, dirB, 100);
+      driveArdumoto(MOTOR_A, dirA);
+      driveArdumoto(MOTOR_B, dirB);
   
-      // Spin for 0.05 s then look for target
-      delay(50); 
+      // Spin for 0.5 s then look for target
+      delay(500); 
       stopRobot();
       
       // Clear samples as it were in the begining
@@ -178,7 +179,7 @@ vector filterDiscrepancies(float xPos, float yPos){
   float oldX = oldSample.xPos;
   float oldY = oldSample.yPos;
 
-  const int errorMargin = 8;
+  const int errorMargin = 800;
   
   // Check if new Pos is between the acceptable erro margin
   // only if the oldSample is bigger than (0, 0)
@@ -207,17 +208,16 @@ vector filterDiscrepancies(float xPos, float yPos){
 void goToPosition(vector targetPosition){
   vector nullVector(0.0, 0.0);
   
-  if (targetPosition != nullVector){
+  if (targetPosition != nullVector && targetPosition.calculateMagnitude() > MIN_DISTANCE){
     int velocityLeftWheel = 0;
     int velocityRightWheel = 0;
+    
     calculateWheelsVelocities(targetPosition, velocityLeftWheel, velocityRightWheel);
     
-    int dirA = 0;
-    int dirB = 0;
-    computePwmAndDirections(dirA, dirB, velocityRightWheel, velocityLeftWheel);
+    computePwmAndDirections(velocityRightWheel, velocityLeftWheel);
   
-    driveArdumoto(MOTOR_A, dirA, velocityRightWheel);
-    driveArdumoto(MOTOR_B, dirB, velocityLeftWheel);
+    driveArdumoto(MOTOR_A, velocityRightWheel);
+    driveArdumoto(MOTOR_B, velocityLeftWheel);
   
   } else {
     stopRobot();  
@@ -225,57 +225,58 @@ void goToPosition(vector targetPosition){
 }
 
 
-void calculateWheelsVelocities(const vector targetPosition, int &leftWheel, int &rightWheel){
+void calculateWheelsVelocities(vector targetPosition, int &leftWheel, int &rightWheel){
   float velocity = calculateVelocity(targetPosition);
-  double omega = angularPID.process();
+  double omega = setpoint - targetPosition; //angularPID.process();
   
   leftWheel = (2 * velocity + omega * DISTANCE_MOTOR_CENTER) / (2 * WHEEL_RADIUS);
   rightWheel = (2 * velocity - omega * DISTANCE_MOTOR_CENTER) / (2 * WHEEL_RADIUS);
 
-  if (DEBUG){
+  if (DEBUG == 1){
+          
+          Serial.print("VL = ");
+          Serial.print(leftWheel);
+          Serial.println();
+          Serial.print("VR = ");
+          Serial.print(rightWheel);
+          Serial.println();
+          /*
           Serial.print("Velocity\n");
           Serial.print("VL ");Serial.print(leftWheel);Serial.print(" = (2 * ");
           Serial.print(velocity);Serial.print(" - ");Serial.print(omega);
-          Serial.print(" * 7) / ( 2 * 3)\n");
+          Serial.print(" * 48) / ( 2 * 6)\n");
           Serial.print("VR ");Serial.print(rightWheel);Serial.print(" = (2 * ");
           Serial.print(velocity);Serial.print(" + ");Serial.print(omega);
-          Serial.print(" * 7) / ( 2 * 3)\n");
+          Serial.print(" * 48) / ( 2 * 6)\n");
+          */
   }
   
 }
 
 
 // Check direction for motors and assign correct speed
-void computePwmAndDirections(int &dirA, int &dirB, int &pwmA, int &pwmB){
-  const int pwmGainConstant = 128;
-
+void computePwmAndDirections(int &pwmA, int &pwmB){
+  const int pwmGain = 0;
+  const int pwmAGainConstant = 30 + pwmGain;
+  const int pwmBGainConstant = 0 + pwmGain;
+  
   if (pwmA > 0){ // Go foward
-    pwmA += pwmGainConstant;
-    dirA = CW;
+    pwmA += pwmAGainConstant;
+    //dirA = CW;
   
-  } else if (pwmA < 0){ // Go backward
-    pwmA -= pwmGainConstant;
-    pwmA = abs(pwmA);
-    dirA = CCW;
-  
-  } else { // Stay put
+  } else {
     pwmA = 0;
   }
   
   if (pwmB > 0){
-    pwmB += pwmGainConstant;
-    dirB = CW;
-  
-  } else if (pwmB < 0){
-    pwmB -= pwmGainConstant;
-    pwmB = abs(pwmB);
-    dirB = CCW;
+    pwmB += pwmBGainConstant;
+    //dirB = CW;
   
   } else {
     pwmB = 0;
   }
 
-  if (DEBUG){
+  if (DEBUG == 2){
     Serial.print("PWMs:");Serial.print(pwmB);Serial.print("~");Serial.print(pwmA);
     Serial.print("\n");
   }
@@ -314,11 +315,13 @@ void oneSensorCycle() {
   // Ciclo de leitura do sensor
   for (uint8_t i = 0; i < SONAR_NUM; i++) {
     //Imprime os valores lidos pelos sensores, no serial monitor
-    Serial.print("Sensor : ");
-    Serial.print(i); 
-    Serial.print(" = ");
-    Serial.print(cm[i]);
-    Serial.print(" cm - ");
+    if(DEBUG == 3){
+      Serial.print("Sensor : ");
+      Serial.print(i); 
+      Serial.print(" = ");
+      Serial.print(cm[i]);
+      Serial.print(" cm - ");
+    }
   }
   Serial.println();
 }

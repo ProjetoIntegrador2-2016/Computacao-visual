@@ -7,30 +7,28 @@
 #define MOTOR_B 1
 
 // Pin definitions for Motors
-const byte PWMA = 3;  // PWM control (speed) for motor A
-const byte PWMB = 11; // PWM control (speed) for motor B
-const byte DIRA = 12; // Direction control for motor A
-const byte DIRB = 13; // Direction control for motor B
+const byte PWMA = 12;  // PWM control (speed) for motor A
+const byte PWMB = 13; // PWM control (speed) for motor B
 
 // driveArdumoto drives 'motor' in 'dir' direction at 'spd' speed
-void driveArdumoto(byte motor, byte dir, byte spd) {
+void driveArdumoto(byte motor, byte spd) {
   if (motor == MOTOR_A) {
-    digitalWrite(DIRA, dir);
+    //digitalWrite(DIRA, dir);
     analogWrite(PWMA, spd);
     
   } else if (motor == MOTOR_B) {
-    digitalWrite(DIRB, dir);
+    //digitalWrite(DIRB, dir);
     analogWrite(PWMB, spd);
   }  
 }
 
 void stopRobot(){
-  driveArdumoto(MOTOR_A, 0, 0);
-  driveArdumoto(MOTOR_B, 0, 0);
+  driveArdumoto(MOTOR_A, 0);
+  driveArdumoto(MOTOR_B, 0);
 }
 
 void stopArdumoto(byte motor) {
-  driveArdumoto(motor, 0, 0);
+  driveArdumoto(motor, 0);
 }
 
 // setupArdumoto initialize all pins
@@ -38,12 +36,8 @@ void setupArdumoto() {
   // All pins should be setup as outputs:
   pinMode(PWMA, OUTPUT);
   pinMode(PWMB, OUTPUT);
-  pinMode(DIRA, OUTPUT);
-  pinMode(DIRB, OUTPUT);
 
   // Initialize all pins as low:
   digitalWrite(PWMA, LOW);
   digitalWrite(PWMB, LOW);
-  digitalWrite(DIRA, LOW);
-  digitalWrite(DIRB, LOW);
 }
