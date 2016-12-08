@@ -282,18 +282,18 @@ void followTarget(vector targetPosition){
   }
 }
 
-void moveCart(targetPosition){
+void moveCart(vector targetPosition){
   loopSensors();
   targetDirection = detectDirection(targetPosition);
   double omega = angularPID.process();
 
   if (omega > ARBITRARY){ // if the target is in the right
     if (MIN_DISTANCE => cm[RIGHT_SENSOR]){ // if an obstacle is found in the right
-      avoidObstacle(RIGHT);
+      avoidObstacle(RIGHT, targetPosition);
     }
   } else if (omega < -ARBITRARY){ // if the target is in the left
     if (MIN_DISTANCE => cm[LEFT_SENSOR]){// if an obstacle is found in the left
-      avoidObstacle(LEFT);
+      avoidObstacle(LEFT, targetPosition);
     }
   } else if (MIN_DISTANCE => cm[FOWARD_SENSOR]){ // if an obstacle is found foward
     stopRobot();
@@ -302,14 +302,15 @@ void moveCart(targetPosition){
   }
 }
 
-void avoidObstacle(obstacleDirection, targetPosition){
+void avoidObstacle(String obstacleDirection, vector targetPosition){
   if (obstacleDirection == RIGHT){
-    obstacleVector = (cm[RIGHT_SENSOR], 0.0);
+    vector obstacleVector = (cm[RIGHT_SENSOR], 0.0);
     adjustedVector = targetPosition - obstacleVector;
+    vector adjustedVector = vector(targetPosition.xPos - obstacleVector.xPos), (targetPosition.yPos - obstacleVector.yPos));
     goToPosition(adjustedVector);
   } else if (obstacleDirection == LEFT){
     obstacleVector = (-cm[RIGHT_SENSOR], 0.0);
-    adjustedVector = targetPosition - obstacleVector;
+    vector adjustedVector = vector(targetPosition.xPos - obstacleVector.xPos), (targetPosition.yPos - obstacleVector.yPos));
     goToPosition(adjustedVector);
   }
 }
