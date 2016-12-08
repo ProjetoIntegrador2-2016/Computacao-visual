@@ -71,15 +71,15 @@ float calculateVelocity(vector oldSample, vector newSample, long &lastTime, int 
 
 float calculateVelocity(vector newSample){
   float distance = newSample.calculateMagnitude();
-  int minDistance = 20;
-  int maxDistance = 50;
+  int minDistance = 40;
+  int maxDistance = 90;
   int minPWM = 0;
-  int maxPWM = 130;
+  int maxPWM = 100;
   
   float velocity = map(distance, minDistance, maxDistance, minPWM, maxPWM);
 
-  if (velocity > 130){
-    velocity = 130;
+  if (velocity > maxPWM){
+    velocity = maxPWM;
   }
   
   return velocity;

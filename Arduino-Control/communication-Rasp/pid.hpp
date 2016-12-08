@@ -40,7 +40,8 @@ public:
 
         if (!isnan(error)){ 
           
-          float deltaTime = (millis() - lastProcess) / 1000.0;
+          float deltaTime = (millis() - lastProcess + 100) / 1000.0;
+          //Serial.print(deltaTime);
           lastProcess = millis();
           
           double P = error * kP;

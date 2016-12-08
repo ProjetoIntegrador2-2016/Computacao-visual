@@ -12,7 +12,7 @@
 // Utrasonic sensor definitions
 #define SONAR_NUM     3
 #define MAX_DISTANCE  90 // Distancia de deteccao
-#define MIN_DISTANCE  30
+#define MIN_DISTANCE  40
 #define PING_INTERVAL 33 //Intervalo entre as medicoes - valor minimo 29ms
 
 // Pin definitions for Ultrasonic sensors
@@ -24,17 +24,19 @@ const byte TRIGGER_L = 23;
 const byte ECHO_L = 22;
 
 // Debug Constant
-const byte DEBUG = 2;
-vector setpoint(0.0, 30.0);
+const byte DEBUG = 1;
+vector setpoint(0.0, 40.0);
 
 // ############################### GLOBALS #######################################
 
 // PID Globals
 PID<float> distancePID(0.5, 0.025, 0, 20); // SetPoint 20 (distance)
-PID<vector> angularPID(0.5, 0.004, 0, setpoint); // SetPoint 90 degrees
+PID<vector> angularPID(0.5, 0.009, 0, setpoint); // SetPoint 90 degrees
 
 vector oldSample(0.0, 0.0);
 long lastTime = 0;
+long waitTime = 0;
+double omega = 0.0;
 
 // Ultrasonic sensors globals
 unsigned long pingTimer[SONAR_NUM]; // Vezes que a medicao deve ocorrer
@@ -63,7 +65,8 @@ void setup(){
   }
     
   lastTime = millis();
-
+  waitTime = 2000;
+  
   Serial.print("Ready to roll!");
   
 }
@@ -84,14 +87,23 @@ void loop(){
     
     vector sample = checkValues(sampleXY[0], sampleXY[1]);
     
-    // Calculate PID gains
-    double omega = angularPID.addNewSample(sample);
-    
-    Serial.print("Omega: ");
-    Serial.print(omega);
-    Serial.println();
-    
-    goToPosition(sample);
+    if (lastTime + waitTime <=  millis()){
+        
+      // Calculate PID gains
+      omega = angularPID.addNewSample(sample);
+      
+      if (DEBUG == 2){
+        Serial.print("Omega: ");
+        Serial.print(omega);
+        Serial.println();
+      }
+      goToPosition(sample);
+      
+      oldSample = sample;
+      
+    } else {
+      Serial.print("Wait for identification\n");
+    }
     
     if (DEBUG){
       Serial.print("Vector: ");
@@ -100,8 +112,6 @@ void loop(){
       Serial.print(sampleXY[0]);Serial.print("--");Serial.print(sampleXY[1]);
       Serial.print("\n\n");
     }
-    
-    oldSample = sample;
     
   } // end Serial available
   
@@ -114,7 +124,7 @@ vector checkValues(float xPos, float yPos){
 
   if (yPos >= 0) {
     // Looks good, no invalid token
-    result = filterDiscrepancies(xPos, yPos);
+    //result = filterDiscrepancies(xPos, yPos);
   
   } else { // Target not found, go to last known position then search it
     
@@ -143,12 +153,15 @@ vector checkValues(float xPos, float yPos){
       // Spin for 0.5 s then look for target
       delay(200); 
       stopRobot();
-      delay(500);
+      
+      lastTime = millis();
+      waitTime = 1000;
       
       // Clear samples as it were in the begining
       result = vector();
       oldSample = result;
       angularPID.reset();
+      omega = 0.0;
     }
   }
   
@@ -198,7 +211,8 @@ void goToPosition(vector targetPosition){
     calculateWheelsVelocities(targetPosition, velocityLeftWheel, velocityRightWheel);
     
     computePwmAndDirections(velocityRightWheel, velocityLeftWheel);
-  
+    
+    softStartMotors(velocityRightWheel, velocityLeftWheel);
     driveArdumoto(MOTOR_A, velocityRightWheel);
     driveArdumoto(MOTOR_B, velocityLeftWheel);
   
@@ -210,7 +224,7 @@ void goToPosition(vector targetPosition){
 
 void calculateWheelsVelocities(vector targetPosition, int &leftWheel, int &rightWheel){
   float velocity = calculateVelocity(targetPosition);
-  double omega = angularPID.process();
+  //double omega = angularPID.process();
   
   leftWheel = (2 * velocity + omega * DISTANCE_MOTOR_CENTER) / (2 * WHEEL_RADIUS);
   rightWheel = (2 * velocity - omega * DISTANCE_MOTOR_CENTER) / (2 * WHEEL_RADIUS);
@@ -239,14 +253,19 @@ void calculateWheelsVelocities(vector targetPosition, int &leftWheel, int &right
 
 // Check direction for motors and assign correct speed
 void computePwmAndDirections(int &pwmA, int &pwmB){
-  const int pwmGain = 0;
-  const int pwmAGainConstant = 30 + pwmGain;
+  const int pwmGain = 20;
+  const int pwmAGainConstant = 50 + pwmGain;
   const int pwmBGainConstant = 0 + pwmGain;
   
   if (pwmA > 0){ // Go foward
+    
     pwmA += pwmAGainConstant;
     //dirA = CW;
-  
+    
+    if (pwmA > 250){
+      pwmA = 250;
+    }
+    
   } else {
     pwmA = 0;
   }
@@ -254,7 +273,11 @@ void computePwmAndDirections(int &pwmA, int &pwmB){
   if (pwmB > 0){
     pwmB += pwmBGainConstant;
     //dirB = CW;
-  
+
+    if (pwmB > 250){
+      pwmB = 250;
+    }
+    
   } else {
     pwmB = 0;
   }
