@@ -100,14 +100,14 @@ void loop(){
 
          if (sampleXY[0] < -4.0){
 
-            if (cm[LEFT] < MIN_DISTANCE && cm[LEFT] > 0){
+            if (hasObstacle(LEFT)){
               goFoward(sample);
               
             } else if (!hasObstacle(FRONT)) {
               goLeft(sample);  
               
             } else {
-              stopRobot();
+              stopMoving();
             }
             
          } else if (sampleXY[0] > 4.0){
@@ -119,12 +119,12 @@ void loop(){
               goRight(sample);
               
            }else {
-              stopRobot();
+              stopMoving();
            }
          
          } else {
             if (hasObstacle(FRONT)){
-                stopRobot();
+                stopMoving();
              } else {
                 goFoward(sample);
              }
@@ -170,7 +170,6 @@ void loop(){
         stopRobot();
         lastTime = millis();
         waitTime = 500;
-   
       } 
        
     } else {
@@ -186,13 +185,12 @@ void loop(){
 
 
 void goFoward(vector targetPosition){
-  vector nullVector(0.0, 0.0);
   
   int velocityLeftWheel = 20.0;
   int velocityRightWheel = velocityLeftWheel + GAIN;
   
-  if (targetPosition != nullVector && targetPosition.calculateMagnitude() > MIN_DISTANCE){
-    if (state ==1){
+  if (targetPosition.calculateMagnitude() > MIN_DISTANCE && !hasObstacle(FRONT)){
+    if (state == 1){
           
             driveArdumoto(MOTOR_A, velocityRightWheel);
             driveArdumoto(MOTOR_B, velocityLeftWheel);
@@ -214,20 +212,16 @@ void goFoward(vector targetPosition){
       }
   
   } else {
-    stopRobot();
-    state =0 ;  
+    stopMoving(); 
   }
 }
 
 void goLeft(vector targetPosition){
-  vector nullVector(0.0, 0.0);
-
 
   int velocityLeftWheel = 20.0;
   int velocityRightWheel = velocityLeftWheel + GAIN + 40;
 
-  
-  if (targetPosition != nullVector && targetPosition.calculateMagnitude() > MIN_DISTANCE){
+  if (targetPosition.calculateMagnitude() > MIN_DISTANCE && !hasObstacle(LEFT)){
     if (state ==1){
           
             driveArdumoto(MOTOR_A, velocityRightWheel);
@@ -250,8 +244,7 @@ void goLeft(vector targetPosition){
       }
   
   } else {
-    stopRobot();
-    state =0 ;  
+    stopMoving(); 
   }
 }
 
@@ -263,7 +256,7 @@ void goRight(vector targetPosition){
   int velocityRightWheel = velocityLeftWheel + GAIN;
 
   
-  if (targetPosition != nullVector && targetPosition.calculateMagnitude() > MIN_DISTANCE){
+  if (targetPosition.calculateMagnitude() > MIN_DISTANCE && !hasObstacle(RIGHT)){
     if (state ==1){
           
             driveArdumoto(MOTOR_A, velocityRightWheel);
@@ -286,9 +279,15 @@ void goRight(vector targetPosition){
       }
   
   } else {
-    stopRobot();
-    state =0 ;  
+    stopMoving();
   }
+}
+
+void stopMoving(){
+  stopRobot();
+  state = 0;  
+  lastTime = millis();
+  waitTime = 500;
 }
 
 // ############################ ULTRASONIC METHODS ################################
